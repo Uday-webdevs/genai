@@ -1,8 +1,7 @@
 import { Request, Response } from "express";
 import { z } from "zod";
+
 import { generateAnswer, generateAnswerStream } from "../services/llm.service";
-
-
 
 const chatSchema = z.object({
     message: z
@@ -53,14 +52,52 @@ export async function chatStream(
         })
     }
 
+    const controller = new AbortController()
+
+    let completed = false;
+    let timedOut = false;
+    let clientDisconnected = false;
+
+    const timedOutMessage = "AI response timed out. Please try again."
+
+    let timeout = setTimeout(() => {
+        /** To handle race condition, if the response is completed / cliet disconnected at the exactly at the TIMEOUT time. */
+        if (completed || clientDisconnected || res.writableEnded) {
+            return;
+        }
+
+        timedOut = true;
+        controller.abort();
+
+        console.log("timeout hit: true and aborted")
+
+        res.write(
+            `data: ${JSON.stringify({
+                error: timedOutMessage,
+                code: "LLM_TIMEOUT"
+            })}\n\n`
+        );
+
+        res.end();
+    }, 2_000)
+
     try {
+        res.on("close", () => {
+            if (completed || timedOut) return;
+
+            console.log("Client disconnected.")
+
+            clientDisconnected = true;
+            controller.abort();
+        })
+
         res.setHeader("Content-Type", "text/event-stream");
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("Connection", "keep-alive");
 
         res.flushHeaders();
 
-        const stream = await generateAnswerStream(result.data.message)
+        const stream = await generateAnswerStream(result.data.message, controller.signal)
 
         for await (const event of stream) {
             if (event.type === "response.output_text.delta") {
@@ -68,12 +105,19 @@ export async function chatStream(
             }
         }
 
-        res.write("data: [DONE]\n\n")
-        res.end();
+
+        if (!timedOut && !clientDisconnected && !res.writableEnded){
+            completed = true;
+
+            res.write("data: [DONE]\n\n")
+            res.end();
+
+            console.log("LLM stream completed successfully.")
+        }
     } catch (e) {
         console.error("LLM streaming failed:", e);
 
-        if (!res.headersSent){
+        if (!res.headersSent) {
             return res.status(502).json({
                 error: "AI service temporarily unavailable."
             })
@@ -86,5 +130,7 @@ export async function chatStream(
         )
 
         res.end();
+    } finally {
+        clearTimeout(timeout)
     }
 }

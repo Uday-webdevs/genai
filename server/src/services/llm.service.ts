@@ -20,8 +20,7 @@ export async function generateAnswerStream(message: string, signal?: AbortSignal
         model: llm,
         input: message,
         stream: true,
-        signal
-    })
+    }, { signal })
 
     return stream;
 }

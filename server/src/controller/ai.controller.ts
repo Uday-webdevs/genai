@@ -20,7 +20,7 @@ export async function chat(
     if (!result.success) {
         return res.status(400).json({
             error: "Invalid request",
-            details: result.error.flatten()
+            details: z.flattenError(result.error)
         })
     }
     
@@ -48,7 +48,7 @@ export async function chatStream(
     if (!result.success) {
         return res.status(400).json({
             error: "Invalid input",
-            details: result.error.flatten()
+            details: z.flattenError(result.error)
         })
     }
 

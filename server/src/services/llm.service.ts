@@ -4,7 +4,7 @@ import { env } from "../config/env";
 const client = new OpenAI({
     apiKey: env.OPENAI_API_KEY
 })
-const llm = "gpt-4o-mini";
+const llm = env.OPENAI_LLM;
 
 export async function generateAnswer(message: string): Promise<string> {
     const response = await client.responses.create({

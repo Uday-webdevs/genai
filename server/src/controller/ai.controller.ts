@@ -79,7 +79,7 @@ export async function chatStream(
         );
 
         res.end();
-    }, 2_000)
+    }, 30_000)
 
     try {
         res.on("close", () => {

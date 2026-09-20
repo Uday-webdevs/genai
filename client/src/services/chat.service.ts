@@ -1,59 +1,52 @@
-const API_URL = "http://localhost:3000";
+import type {
+  IChatTurn,
+  IRagAnswer,
+  IRagStatus,
+} from "../types/chat";
 
-export async function chatStream(message: string, onChunk: (chunk: string) => void) {
-    const response = await fetch(
-        `${API_URL}/api/ai/chat/stream`,
-        {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                message
-            })
-        }
-    )
+const API_URL =
+  import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
-    if (!response.ok) {
-        throw new Error("Failed to get AI response.")
-    }
+async function readError(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as { error?: string };
+    return body.error ?? "Something went wrong. Please try again.";
+  } catch {
+    return "Something went wrong. Please try again.";
+  }
+}
 
-    if (!response.body) {
-        throw new Error("Streaming is not support by this response")
-    }
+export async function getRagStatus(
+  signal?: AbortSignal,
+): Promise<IRagStatus> {
+  const response = await fetch(`${API_URL}/api/rag/status`, {
+    signal,
+  });
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
+  if (!response.ok) {
+    throw new Error(await readError(response));
+  }
 
-    let buffer = "";
-    
-    while (true) {
-        const { value, done} = await reader.read()
+  return response.json() as Promise<IRagStatus>;
+}
 
-        if (done) {
-            break;
-        }
+export async function askKnowledgeBase(
+  message: string,
+  history: IChatTurn[],
+  signal?: AbortSignal,
+): Promise<IRagAnswer> {
+  const response = await fetch(`${API_URL}/api/rag/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ message, history }),
+    signal,
+  });
 
-        buffer += decoder.decode(value, {
-            stream: true
-        })
-        const events = buffer.split("\n\n");
-        buffer = events.pop() ?? "";
+  if (!response.ok) {
+    throw new Error(await readError(response));
+  }
 
-        for (const event of events) {
-            if (!event.startsWith("data: ")) continue;
-
-            const data = event.slice(6);
-            
-            if (data === "[DONE]") return;
-
-            try {
-                const parsed = JSON.parse(data);
-                if (parsed.error) throw new Error(parsed.error);
-                onChunk(data);
-            } catch {
-                onChunk(data);
-            }
-        }
-    }
+  return response.json() as Promise<IRagAnswer>;
 }

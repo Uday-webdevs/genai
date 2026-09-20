@@ -1,16 +1,13 @@
-import OpenAI from "openai"
 import { zodTextFormat } from "openai/helpers/zod.js";
 
 import { env } from "../config/env"
+import { openai } from "../config/openai";
 import { supportAnalysisSchema } from "../schemas/ai.schema";
 
-const client = new OpenAI({
-    apiKey: env.OPENAI_API_KEY
-})
 const llm = env.OPENAI_LLM;
 
 export async function generateSupportAnalysis(message: string) {
-    const response = await client.responses.parse({
+    const response = await openai.responses.parse({
         model: llm,
         input: [
             {

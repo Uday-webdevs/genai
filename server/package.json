@@ -6,17 +6,24 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "inspect:book": "tsc && node dist/scripts/inspect-book.js",
+    "ingest:book": "tsc && node dist/scripts/ingest-book.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@langchain/core": "^1.2.12",
+    "@langchain/textsplitters": "^1.0.1",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "js-tiktoken": "^1.0.21",
+    "mongodb": "^7.6.0",
     "openai": "^7.17.0",
+    "pdfjs-dist": "^6.3.289",
     "zod": "^4.6.5"
   },
   "devDependencies": {

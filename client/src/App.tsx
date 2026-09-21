@@ -1,6 +1,8 @@
 import {
+  type DragEvent,
   type FormEvent,
   type KeyboardEvent,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -10,18 +12,33 @@ import "./App.css";
 import {
   askKnowledgeBase,
   getRagStatus,
+  uploadKnowledgeDocument,
 } from "./services/chat.service";
 import type {
   IChatMessage,
+  IRagDocumentSummary,
   IRagCitation,
   IRagStatus,
 } from "./types/chat";
 
 const SUGGESTED_QUESTIONS = [
-  "Explain the laws of motion with an everyday example.",
-  "What is refraction of light?",
-  "Summarize the chapter on gravitation.",
+  "Summarize the main ideas in my documents.",
+  "What are the most important concepts to understand?",
+  "Create five study questions from the uploaded material.",
 ];
+
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+interface UploadState {
+  fileName: string;
+  phase: "uploading" | "indexing";
+  progress: number;
+}
+
+interface UploadFeedback {
+  type: "success" | "error";
+  message: string;
+}
 
 type IconProps = { className?: string };
 
@@ -69,6 +86,35 @@ function SourceIcon({ className }: IconProps) {
   );
 }
 
+function UploadIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 16V4M7.5 8.5 12 4l4.5 4.5" />
+      <path d="M5 14v5h14v-5" />
+    </svg>
+  );
+}
+
+function DocumentCard({ document }: { document: IRagDocumentSummary }) {
+  const detail =
+    document.status === "ready"
+      ? `${document.pageCount} pages · ${document.chunkCount} passages`
+      : document.status === "processing"
+        ? "Indexing now"
+        : "Indexing failed";
+
+  return (
+    <div className={`resource-card ${document.status}`} title={document.error}>
+      <span className="resource-icon"><SourceIcon /></span>
+      <span className="resource-copy">
+        <strong>{document.title}</strong>
+        <span>{detail}</span>
+      </span>
+      <span className="document-status" aria-label={document.status} />
+    </div>
+  );
+}
+
 function CitationCard({ citation, index }: { citation: IRagCitation; index: number }) {
   const pageLabel =
     citation.pdfPageStart === citation.pdfPageEnd
@@ -99,9 +145,25 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<IRagStatus | null>(null);
   const [statusUnavailable, setStatusUnavailable] = useState(false);
+  const [uploadState, setUploadState] = useState<UploadState | null>(null);
+  const [uploadFeedback, setUploadFeedback] = useState<UploadFeedback | null>(null);
+  const [dragActive, setDragActive] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const requestControllerRef = useRef<AbortController | null>(null);
+  const uploadControllerRef = useRef<AbortController | null>(null);
+
+  const refreshStatus = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const result = await getRagStatus(signal);
+      setStatus(result);
+      setStatusUnavailable(false);
+    } catch (requestError: unknown) {
+      if (requestError instanceof DOMException && requestError.name === "AbortError") return;
+      setStatusUnavailable(true);
+    }
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -120,8 +182,21 @@ function App() {
   }, []);
 
   useEffect(() => {
-    return () => requestControllerRef.current?.abort();
+    return () => {
+      requestControllerRef.current?.abort();
+      uploadControllerRef.current?.abort();
+    };
   }, []);
+
+  useEffect(() => {
+    if (!uploadState || uploadState.phase !== "indexing") return;
+
+    const interval = window.setInterval(() => {
+      void refreshStatus();
+    }, 3_000);
+
+    return () => window.clearInterval(interval);
+  }, [refreshStatus, uploadState]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -210,6 +285,83 @@ function App() {
     requestAnimationFrame(() => textAreaRef.current?.focus());
   }
 
+  async function handlePdf(file: File): Promise<void> {
+    if (uploadState) return;
+
+    if (
+      file.type !== "application/pdf" ||
+      !file.name.toLowerCase().endsWith(".pdf")
+    ) {
+      setUploadFeedback({
+        type: "error",
+        message: "Choose a PDF file to continue.",
+      });
+      return;
+    }
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setUploadFeedback({
+        type: "error",
+        message: "PDFs must be 25 MB or smaller.",
+      });
+      return;
+    }
+
+    const controller = new AbortController();
+    uploadControllerRef.current = controller;
+    setUploadFeedback(null);
+    setUploadState({
+      fileName: file.name,
+      phase: "uploading",
+      progress: 0,
+    });
+
+    try {
+      const result = await uploadKnowledgeDocument(
+        file,
+        (progress) => {
+          setUploadState({
+            fileName: file.name,
+            phase: progress >= 100 ? "indexing" : "uploading",
+            progress,
+          });
+        },
+        controller.signal,
+      );
+
+      await refreshStatus();
+      setUploadFeedback({
+        type: "success",
+        message:
+          result.status === "skipped"
+            ? "This PDF was already in your knowledge base."
+            : `${result.title} is ready with ${result.chunkCount} passages.`,
+      });
+    } catch (uploadError: unknown) {
+      if (uploadError instanceof DOMException && uploadError.name === "AbortError") return;
+      setUploadFeedback({
+        type: "error",
+        message:
+          uploadError instanceof Error
+            ? uploadError.message
+            : "The PDF could not be indexed.",
+      });
+    } finally {
+      if (uploadControllerRef.current === controller) {
+        uploadControllerRef.current = null;
+        setUploadState(null);
+      }
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>): void {
+    event.preventDefault();
+    setDragActive(false);
+    const [file] = Array.from(event.dataTransfer.files);
+    if (file) void handlePdf(file);
+  }
+
   const isReady = Boolean(status && status.readyDocuments > 0);
   const statusLabel = isReady
     ? "Knowledge base ready"
@@ -235,14 +387,78 @@ function App() {
           New conversation
         </button>
 
+        <input
+          ref={fileInputRef}
+          className="visually-hidden"
+          type="file"
+          accept="application/pdf,.pdf"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void handlePdf(file);
+          }}
+        />
+
+        <div
+          className={`upload-card ${dragActive ? "drag-active" : ""} ${uploadState ? "busy" : ""}`}
+          onDragEnter={(event) => {
+            event.preventDefault();
+            setDragActive(true);
+          }}
+          onDragOver={(event) => event.preventDefault()}
+          onDragLeave={() => setDragActive(false)}
+          onDrop={handleDrop}
+        >
+          <span className="upload-icon"><UploadIcon /></span>
+          {uploadState ? (
+            <>
+              <strong>
+                {uploadState.phase === "uploading" ? "Uploading PDF" : "Building knowledge"}
+              </strong>
+              <span className="upload-file-name">{uploadState.fileName}</span>
+              <span className="progress-track">
+                <span style={{ width: `${uploadState.progress}%` }} />
+              </span>
+              <small>
+                {uploadState.phase === "uploading"
+                  ? `${uploadState.progress}% uploaded`
+                  : "Extracting, chunking and embedding..."}
+              </small>
+            </>
+          ) : (
+            <>
+              <strong>Add a PDF</strong>
+              <span>Drop it here or browse</span>
+              <button type="button" onClick={() => fileInputRef.current?.click()}>
+                Choose file
+              </button>
+              <small>Text-based PDF · Up to 25 MB</small>
+            </>
+          )}
+        </div>
+
+        {uploadFeedback && (
+          <div className={`upload-feedback ${uploadFeedback.type}`} role="status">
+            <span>{uploadFeedback.message}</span>
+            <button
+              type="button"
+              onClick={() => setUploadFeedback(null)}
+              aria-label="Dismiss upload message"
+            >×</button>
+          </div>
+        )}
+
         <div className="sidebar-section">
-          <p className="section-label">Knowledge base</p>
-          <div className="resource-card">
-            <span className="resource-icon"><SourceIcon /></span>
-            <span className="resource-copy">
-              <strong>Science & Technology</strong>
-              <span>Standard Ten · Part 1</span>
-            </span>
+          <p className="section-label">
+            Knowledge base
+            {status && <span>{status.documents.length}</span>}
+          </p>
+          <div className="resource-list">
+            {status?.documents.map((document) => (
+              <DocumentCard document={document} key={document.id} />
+            ))}
+            {status && status.documents.length === 0 && (
+              <p className="empty-resources">Upload your first PDF to start asking questions.</p>
+            )}
           </div>
         </div>
 
@@ -252,7 +468,7 @@ function App() {
             <span>{statusLabel}</span>
           </div>
           {status && (
-            <p>{status.readyDocuments} document · {status.chunks} searchable passages</p>
+            <p>{status.readyDocuments} ready · {status.chunks} searchable passages</p>
           )}
         </div>
       </aside>
@@ -260,12 +476,23 @@ function App() {
       <main className="chat-panel">
         <header className="chat-header">
           <div>
-            <span className="eyebrow">Textbook assistant</span>
-            <h1>Ask your science book</h1>
+            <span className="eyebrow">Source-grounded assistant</span>
+            <h1>Chat with your PDFs</h1>
           </div>
-          <div className={`grounded-pill ${isReady ? "ready" : ""}`}>
-            <span />
-            {isReady ? "Grounded in your book" : status ? "No source" : "Connecting"}
+          <div className="header-actions">
+            <button
+              className="mobile-upload-button"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={Boolean(uploadState)}
+            >
+              <UploadIcon />
+              {uploadState ? "Indexing" : "Add PDF"}
+            </button>
+            <div className={`grounded-pill ${isReady ? "ready" : ""}`}>
+              <span />
+              {isReady ? "Grounded in your PDFs" : status ? "No source" : "Connecting"}
+            </div>
           </div>
         </header>
 
@@ -276,7 +503,7 @@ function App() {
               <span className="welcome-kicker">Learn with evidence</span>
               <h2>Grounded answers.<br />Clearer understanding.</h2>
               <p>
-                Ask anything from your indexed science textbook. Every answer is
+                Ask anything from your indexed PDFs. Every answer is
                 checked against the source and comes with page-level references.
               </p>
 
@@ -346,6 +573,16 @@ function App() {
         </section>
 
         <div className="composer-wrap">
+          {uploadFeedback && (
+            <div className={`mobile-upload-feedback ${uploadFeedback.type}`} role="status">
+              <span>{uploadFeedback.message}</span>
+              <button
+                type="button"
+                onClick={() => setUploadFeedback(null)}
+                aria-label="Dismiss upload message"
+              >×</button>
+            </div>
+          )}
           {error && (
             <div className="error-banner" role="alert">
               <span>{error}</span>
@@ -358,7 +595,7 @@ function App() {
               value={input}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isReady ? "Ask a question about your science textbook…" : "Waiting for the knowledge base…"}
+              placeholder={isReady ? "Ask a question across your PDFs…" : "Upload a PDF to begin…"}
               rows={1}
               maxLength={2_000}
               disabled={loading || !isReady}

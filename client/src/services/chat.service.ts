@@ -2,6 +2,7 @@ import type {
   IChatTurn,
   IRagAnswer,
   IRagStatus,
+  IUploadResult,
 } from "../types/chat";
 
 const API_URL =
@@ -49,4 +50,63 @@ export async function askKnowledgeBase(
   }
 
   return response.json() as Promise<IRagAnswer>;
+}
+
+export function uploadKnowledgeDocument(
+  file: File,
+  onProgress: (percentage: number) => void,
+  signal?: AbortSignal,
+): Promise<IUploadResult> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const abortRequest = () => request.abort();
+    const removeAbortListener = () => {
+      signal?.removeEventListener("abort", abortRequest);
+    };
+
+    request.open("POST", `${API_URL}/api/rag/documents`);
+    request.responseType = "json";
+
+    request.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable) return;
+      onProgress(Math.round((event.loaded / event.total) * 100));
+    });
+
+    request.addEventListener("load", () => {
+      removeAbortListener();
+      const body = request.response as
+        | IUploadResult
+        | { error?: string }
+        | null;
+
+      if (request.status >= 200 && request.status < 300 && body) {
+        resolve(body as IUploadResult);
+        return;
+      }
+
+      reject(
+        new Error(
+          body && "error" in body && body.error
+            ? body.error
+            : "The PDF could not be uploaded.",
+        ),
+      );
+    });
+
+    request.addEventListener("error", () => {
+      removeAbortListener();
+      reject(new Error("Could not connect to the upload service."));
+    });
+
+    request.addEventListener("abort", () => {
+      removeAbortListener();
+      reject(new DOMException("Upload cancelled", "AbortError"));
+    });
+
+    signal?.addEventListener("abort", abortRequest, { once: true });
+    request.send(formData);
+  });
 }

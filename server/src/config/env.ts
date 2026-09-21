@@ -31,6 +31,12 @@ const envSchema = z.object({
         .min(1)
         .max(256)
         .default(64),
+    RAG_MAX_UPLOAD_MB: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(100)
+        .default(25),
 })
 .superRefine((value, context) => {
     if (value.RAG_NUM_CANDIDATES < value.RAG_TOP_K) {

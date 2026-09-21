@@ -86,3 +86,14 @@ export interface RagAnswer {
   grounded: boolean;
   citations: RagCitation[];
 }
+
+export interface RagDocumentSummary {
+  id: string;
+  title: string;
+  sourceName: string;
+  status: DocumentStatus;
+  pageCount: number;
+  chunkCount: number;
+  error?: string;
+  updatedAt: Date;
+}

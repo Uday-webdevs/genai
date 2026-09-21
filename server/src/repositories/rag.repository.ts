@@ -4,6 +4,7 @@ import { getDatabase } from "../config/database";
 import type {
   RagChunk,
   RagDocument,
+  RagDocumentSummary,
   RetrievedChunk,
 } from "../types/rag";
 
@@ -164,14 +165,29 @@ export async function searchChunksByVector(
 export async function getRagStats(): Promise<{
   readyDocuments: number;
   chunks: number;
+  documents: RagDocumentSummary[];
 }> {
   const { documents, chunks } = await getRagCollections();
-  const ready = await documents
+  const allDocuments = await documents
     .find(
-      { status: "ready" },
-      { projection: { _id: 1 } },
+      {},
+      {
+        projection: {
+          title: 1,
+          sourceName: 1,
+          status: 1,
+          pageCount: 1,
+          chunkCount: 1,
+          error: 1,
+          updatedAt: 1,
+        },
+      },
     )
+    .sort({ updatedAt: -1 })
     .toArray();
+  const ready = allDocuments.filter(
+    (document) => document.status === "ready",
+  );
   const documentIds = ready.map((document) => document._id);
 
   return {
@@ -182,5 +198,15 @@ export async function getRagStats(): Promise<{
         : await chunks.countDocuments({
             documentId: { $in: documentIds },
           }),
+    documents: allDocuments.map((document) => ({
+      id: document._id,
+      title: document.title,
+      sourceName: document.sourceName,
+      status: document.status,
+      pageCount: document.pageCount,
+      chunkCount: document.chunkCount,
+      ...(document.error ? { error: document.error } : {}),
+      updatedAt: document.updatedAt,
+    })),
   };
 }

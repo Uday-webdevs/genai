@@ -11,6 +11,12 @@ const analyzeSchema = z.object({
         .max(10_000, "Message is too long.")
 })
 
+/**
+ * Validates a support message and returns structured LLM analysis.
+ *
+ * @param req - Express request containing the support `message`.
+ * @param res - Express response receiving structured analysis or an error.
+ */
 export async function analyzeSupportRequest(
     req: Request,
     res: Response

@@ -11,6 +11,12 @@ const chatSchema = z.object({
     .max(10_000, "Message too long")
 })
 
+/**
+ * Handles a non-streaming, general-purpose LLM chat request.
+ *
+ * @param req - Express request containing the user `message`.
+ * @param res - Express response receiving the generated answer or error details.
+ */
 export async function chat(
     req: Request,
     res: Response,
@@ -39,6 +45,13 @@ export async function chat(
     }
 }
 
+/**
+ * Streams general-purpose LLM output as server-sent events and cancels the
+ * provider request when the client disconnects or the timeout expires.
+ *
+ * @param req - Express request containing the user `message`.
+ * @param res - Express response used for the SSE event stream.
+ */
 export async function chatStream(
     req: Request,
     res: Response,

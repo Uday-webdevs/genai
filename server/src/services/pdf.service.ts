@@ -2,6 +2,13 @@ import { readFile } from "node:fs/promises";
 
 import type { IBookPage } from "../types/document";
 
+/**
+ * Extracts normalized text from every page of a local PDF with `pdfjs-dist`.
+ *
+ * @param filePath - Path to the PDF file to read.
+ * @returns Page records in PDF order; pages without extractable text are kept.
+ * @throws When the file cannot be read or parsed as a PDF.
+ */
 export async function extractPdfPages(
     filePath: string,
 ): Promise<IBookPage[]> {

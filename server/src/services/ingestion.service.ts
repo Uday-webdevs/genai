@@ -18,11 +18,17 @@ import { embedTexts, type EmbeddingProgress } from "./embedding.service";
 import { extractPdfPages } from "./pdf.service";
 
 export interface IngestPdfInput {
+    /** Local path to the PDF that will be extracted and indexed. */
     filePath: string;
+    /** User-facing title copied into chunk metadata and citations. */
     title: string;
+    /** First one-based PDF page to index; defaults to the first page. */
     startPdfPage?: number;
+    /** Last one-based PDF page to index; defaults to the final page. */
     endPdfPage?: number;
+    /** Reprocesses a ready document even when its file hash already exists. */
     force?: boolean;
+    /** Receives embedding batch progress for CLI or job-status reporting. */
     onEmbeddingProgress?: (progress: EmbeddingProgress) => void;
 }
 
@@ -53,6 +59,14 @@ function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * Executes the complete PDF ingestion pipeline: deduplication, extraction,
+ * chunking, embedding, persistence, and document-status transitions.
+ *
+ * @param input - Source path, title, optional page range, and ingestion options.
+ * @returns Identifiers and counts for either the ingested or skipped document.
+ * @throws When validation, PDF extraction, embedding, or persistence fails.
+ */
 export async function ingestPdf(
     input: IngestPdfInput,
 ): Promise<IngestPdfResult> {

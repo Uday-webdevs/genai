@@ -4,6 +4,10 @@ import { env } from "./config/env";
 import { closeDatabase, getDatabase } from "./config/database";
 import { ensureRagIndexes } from "./repositories/rag.repository";
 
+/**
+ * Connects infrastructure, starts the HTTP server, and registers graceful
+ * process-signal handlers.
+ */
 async function bootstrap(): Promise<void> {
     await getDatabase();
     await ensureRagIndexes();
@@ -13,6 +17,11 @@ async function bootstrap(): Promise<void> {
         () => console.log(`Server running on port ${env.PORT}`)
     )
 
+    /**
+     * Stops accepting HTTP traffic and closes MongoDB before process exit.
+     *
+     * @param signal - Operating-system signal that initiated shutdown.
+     */
     async function shutdown(signal: string): Promise<void> {
         console.log(`${signal} received. Shutting down.`);
 

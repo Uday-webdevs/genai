@@ -13,6 +13,11 @@ interface RagCollections {
   chunks: Collection<RagChunk>;
 }
 
+/**
+ * Gets the typed MongoDB collections used by the RAG subsystem.
+ *
+ * @returns Handles for the document registry and vectorized chunk collection.
+ */
 export async function getRagCollections(): Promise<RagCollections> {
   const database = await getDatabase();
 
@@ -22,6 +27,11 @@ export async function getRagCollections(): Promise<RagCollections> {
   };
 }
 
+/**
+ * Creates the conventional MongoDB indexes required for document deduplication
+ * and chunk lifecycle operations. The Atlas Vector Search index is managed
+ * separately in Atlas.
+ */
 export async function ensureRagIndexes(): Promise<void> {
   const { documents, chunks } = await getRagCollections();
 
@@ -51,6 +61,12 @@ export async function ensureRagIndexes(): Promise<void> {
   ]);
 }
 
+/**
+ * Finds a previously registered source document by its content hash.
+ *
+ * @param sha256 - SHA-256 digest of the complete source file.
+ * @returns The matching document, or `null` when it has not been registered.
+ */
 export async function findDocumentByHash(
   sha256: string,
 ): Promise<RagDocument | null> {
@@ -58,6 +74,11 @@ export async function findDocumentByHash(
   return documents.findOne({ sha256 });
 }
 
+/**
+ * Inserts or replaces a document registry record by its stable identifier.
+ *
+ * @param document - Complete document metadata and ingestion state to persist.
+ */
 export async function saveDocument(
   document: RagDocument,
 ): Promise<void> {
@@ -70,6 +91,11 @@ export async function saveDocument(
   );
 }
 
+/**
+ * Bulk upserts document chunks by their stable chunk identifiers.
+ *
+ * @param ragChunks - Fully prepared chunks, including embeddings and metadata.
+ */
 export async function upsertChunks(
   ragChunks: RagChunk[],
 ): Promise<void> {
@@ -89,6 +115,12 @@ export async function upsertChunks(
   );
 }
 
+/**
+ * Removes leftover chunks after a document is re-ingested with fewer chunks.
+ *
+ * @param documentId - Identifier of the re-ingested document.
+ * @param chunkCount - Number of chunks in the newest document version.
+ */
 export async function deleteStaleChunks(
   documentId: string,
   chunkCount: number,
@@ -109,6 +141,16 @@ interface VectorSearchResult {
   metadata: RagChunk["metadata"];
 }
 
+/**
+ * Runs Atlas Vector Search and returns chunks belonging only to documents whose
+ * ingestion status is `ready`.
+ *
+ * @param queryVector - Embedding for the user's retrieval query.
+ * @param limit - Maximum number of ready chunks to return.
+ * @param numCandidates - Approximate nearest-neighbor candidates Atlas examines.
+ * @param indexName - Name of the Atlas Vector Search index.
+ * @returns Relevant chunks ordered by Atlas vector similarity.
+ */
 export async function searchChunksByVector(
   queryVector: number[],
   limit: number,
@@ -162,6 +204,11 @@ export async function searchChunksByVector(
   }));
 }
 
+/**
+ * Builds the knowledge-base status shown by the API and client.
+ *
+ * @returns Ready-document count, ready chunk count, and per-document summaries.
+ */
 export async function getRagStats(): Promise<{
   readyDocuments: number;
   chunks: number;

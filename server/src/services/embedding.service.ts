@@ -6,6 +6,14 @@ export interface EmbeddingProgress {
     total: number;
 }
 
+/**
+ * Embeds text in bounded batches while preserving the input order.
+ *
+ * @param texts - Non-empty strings to convert into embedding vectors.
+ * @param onProgress - Optional callback invoked after each completed batch.
+ * @returns One validated embedding vector for each input string.
+ * @throws When text is empty or the provider returns an unexpected result shape.
+ */
 export async function embedTexts(
     texts: string[],
     onProgress?: (progress: EmbeddingProgress) => void,

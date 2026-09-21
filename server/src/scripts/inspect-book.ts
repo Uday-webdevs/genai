@@ -1,6 +1,7 @@
 import { chunkPages } from "../services/chunking.service";
 import { extractPdfPages } from "../services/pdf.service";
 
+/** Extracts and chunks a PDF, then prints statistics and sample chunks. */
 async function main(): Promise<void> {
     const filePath =
         process.argv[2] ?? "data/books/10thScienceBook.pdf";

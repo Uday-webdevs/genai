@@ -24,6 +24,12 @@ const ragChatSchema = z.object({
         .default([]),
 });
 
+/**
+ * Handles a grounded chat request against the indexed document collection.
+ *
+ * @param req - Express request containing `message` and optional chat `history`.
+ * @param res - Express response receiving the RAG answer or an error payload.
+ */
 export async function ragChat(
     req: Request,
     res: Response,
@@ -51,6 +57,12 @@ export async function ragChat(
     }
 }
 
+/**
+ * Reports indexed document and chunk counts for knowledge-base status displays.
+ *
+ * @param _req - Express request; this endpoint does not consume request data.
+ * @param res - Express response receiving the current RAG statistics.
+ */
 export async function ragStatus(
     _req: Request,
     res: Response,
@@ -66,6 +78,12 @@ export async function ragStatus(
     }
 }
 
+/**
+ * Converts an uploaded filename into a readable fallback document title.
+ *
+ * @param originalName - Original client-side filename.
+ * @returns A normalized title without the extension.
+ */
 function defaultDocumentTitle(originalName: string): string {
     return basename(originalName, extname(originalName))
         .replace(/[_-]+/g, " ")
@@ -74,6 +92,12 @@ function defaultDocumentTitle(originalName: string): string {
         .slice(0, 200);
 }
 
+/**
+ * Verifies the PDF magic bytes instead of trusting MIME type and extension.
+ *
+ * @param filePath - Local upload path to inspect.
+ * @returns `true` when the file starts with the `%PDF-` signature.
+ */
 async function hasPdfSignature(filePath: string): Promise<boolean> {
     const file = await open(filePath, "r");
 
@@ -86,10 +110,21 @@ async function hasPdfSignature(filePath: string): Promise<boolean> {
     }
 }
 
+/**
+ * Best-effort cleanup for an upload that should not remain on disk.
+ *
+ * @param filePath - Local upload path to remove.
+ */
 async function removeUploadedFile(filePath: string): Promise<void> {
     await unlink(filePath).catch(() => undefined);
 }
 
+/**
+ * Validates and ingests one PDF uploaded by `acceptSinglePdf`.
+ *
+ * @param req - Express request containing the uploaded file and optional title.
+ * @param res - Express response receiving ingestion metadata or validation errors.
+ */
 export async function uploadRagDocument(
     req: Request,
     res: Response,

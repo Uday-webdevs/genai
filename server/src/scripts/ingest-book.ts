@@ -10,11 +10,26 @@ interface CliOptions {
     force: boolean;
 }
 
+/**
+ * Reads the token immediately following a command-line flag.
+ *
+ * @param args - Raw command-line arguments without the Node executable/script.
+ * @param flag - Named flag whose value should be read.
+ * @returns The following token, or `undefined` when the flag is absent.
+ */
 function readValue(args: string[], flag: string): string | undefined {
     const index = args.indexOf(flag);
     return index >= 0 ? args[index + 1] : undefined;
 }
 
+/**
+ * Parses and validates an optional positive-integer CLI value.
+ *
+ * @param value - Raw string supplied for the flag.
+ * @param fallback - Value returned when the flag was omitted.
+ * @param flag - Flag name included in validation errors.
+ * @returns The parsed integer or fallback.
+ */
 function parsePositiveInteger(
     value: string | undefined,
     fallback: number | undefined,
@@ -30,6 +45,7 @@ function parsePositiveInteger(
     return parsed;
 }
 
+/** Parses book-ingestion command-line arguments into validated options. */
 function parseOptions(): CliOptions {
     const args = process.argv.slice(2);
     const positionalPath =
@@ -61,6 +77,7 @@ function parseOptions(): CliOptions {
     };
 }
 
+/** Runs the book-ingestion command and prints embedding progress. */
 async function main(): Promise<void> {
     const options = parseOptions();
     await ensureRagIndexes();

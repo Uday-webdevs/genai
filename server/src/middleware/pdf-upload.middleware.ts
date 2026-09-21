@@ -40,6 +40,14 @@ const upload = multer({
     },
 });
 
+/**
+ * Express middleware that accepts one multipart PDF under the `file` field and
+ * converts Multer validation errors into JSON HTTP responses.
+ *
+ * @param request - Incoming multipart request populated by Multer on success.
+ * @param response - Express response used for upload validation failures.
+ * @param next - Callback that transfers control after a valid upload.
+ */
 export function acceptSinglePdf(
     request: Request,
     response: Response,

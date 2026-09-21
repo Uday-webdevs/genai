@@ -14,6 +14,13 @@ const splitter = new RecursiveCharacterTextSplitter({
     lengthFunction: (text) => tokenizer.encode(text).length,
 });
 
+/**
+ * Splits extracted PDF pages into overlapping, token-bounded chunks. Pages are
+ * processed independently so each chunk retains precise citation metadata.
+ *
+ * @param pages - Extracted pages to split in their original order.
+ * @returns Normalized chunks with token counts and page metadata.
+ */
 export async function chunkPages(
     pages: IBookPage[],
 ): Promise<IBookChunk[]> {

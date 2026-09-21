@@ -6,6 +6,7 @@ import { openai } from "../config/openai";
 import type {
     RagAnswer,
     RagCitation,
+    RagTokenUsage,
     RetrievedChunk,
 } from "../types/rag";
 import { retrieveRelevantChunks } from "./retrieval.service";
@@ -26,6 +27,11 @@ Do not invent page numbers or sources. Return the one-based source numbers you a
 interface ChatTurn {
     role: "user" | "assistant";
     content: string;
+}
+
+export interface RagGenerationResult {
+    answer: RagAnswer;
+    usage: RagTokenUsage;
 }
 
 function createContext(chunks: RetrievedChunk[]): string {
@@ -55,23 +61,37 @@ function toCitation(chunk: RetrievedChunk): RagCitation {
     };
 }
 
-export async function answerWithRag(
+/**
+ * Produces a source-grounded answer from chunks that have already been
+ * retrieved. Keeping retrieval outside this function lets evaluations reuse
+ * exactly the same evidence without making a second vector-search request.
+ *
+ * @param question - Current user question to answer.
+ * @param chunks - Ranked source chunks available to the model.
+ * @param history - Optional recent turns used only as conversational context.
+ * @returns The answer, validated citations, and model token usage.
+ * @throws When the model does not return the required structured response.
+ */
+export async function generateAnswerFromChunks(
     question: string,
+    chunks: RetrievedChunk[],
     history: ChatTurn[] = [],
-): Promise<RagAnswer> {
+): Promise<RagGenerationResult> {
     const recentHistory = history.slice(-6);
-    const retrievalQuery = [
-        ...recentHistory.slice(-3).map((turn) => turn.content.slice(0, 800)),
-        question,
-    ].join("\n");
-    const chunks = await retrieveRelevantChunks(retrievalQuery);
 
     if (chunks.length === 0) {
         return {
-            answer:
-                "I couldn't find enough information in the indexed textbook to answer that question.",
-            grounded: false,
-            citations: [],
+            answer: {
+                answer:
+                    "I couldn't find enough information in the indexed documents to answer that question.",
+                grounded: false,
+                citations: [],
+            },
+            usage: {
+                inputTokens: 0,
+                outputTokens: 0,
+                totalTokens: 0,
+            },
         };
     }
 
@@ -115,8 +135,36 @@ export async function answerWithRag(
     );
 
     return {
-        answer: response.output_parsed.answer,
-        grounded: citations.length > 0,
-        citations,
+        answer: {
+            answer: response.output_parsed.answer,
+            grounded: citations.length > 0,
+            citations,
+        },
+        usage: {
+            inputTokens: response.usage?.input_tokens ?? 0,
+            outputTokens: response.usage?.output_tokens ?? 0,
+            totalTokens: response.usage?.total_tokens ?? 0,
+        },
     };
+}
+
+/**
+ * Runs the complete online RAG flow for one chat message.
+ *
+ * @param question - Current user question.
+ * @param history - Optional prior user and assistant turns for follow-up queries.
+ * @returns A grounded answer with zero or more validated source citations.
+ */
+export async function answerWithRag(
+    question: string,
+    history: ChatTurn[] = [],
+): Promise<RagAnswer> {
+    const recentHistory = history.slice(-6);
+    const retrievalQuery = [
+        ...recentHistory.slice(-3).map((turn) => turn.content.slice(0, 800)),
+        question,
+    ].join("\n");
+    const chunks = await retrieveRelevantChunks(retrievalQuery);
+
+    return (await generateAnswerFromChunks(question, chunks, recentHistory)).answer;
 }

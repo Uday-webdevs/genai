@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "inspect:book": "tsc && node dist/scripts/inspect-book.js",
-    "ingest:book": "tsc && node dist/scripts/ingest-book.js"
+    "ingest:book": "tsc && node dist/scripts/ingest-book.js",
+    "eval:rag": "tsc && node dist/scripts/evaluate-rag.js"
   },
   "keywords": [],
   "author": "",

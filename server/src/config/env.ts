@@ -12,6 +12,7 @@ const envSchema = z.object({
 
     OPENAI_API_KEY: z.string().min(1),
     OPENAI_LLM: z.string().min(1),
+    OPENAI_EVAL_MODEL: z.string().min(1).optional(),
     OPENAI_EMBEDDING_MODEL: z.string().min(1).default("text-embedding-3-small"),
     OPENAI_EMBEDDING_DIMENSIONS: z.coerce
         .number()

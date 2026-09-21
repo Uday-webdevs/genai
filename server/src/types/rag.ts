@@ -87,6 +87,12 @@ export interface RagAnswer {
   citations: RagCitation[];
 }
 
+export interface RagTokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
 export interface RagDocumentSummary {
   id: string;
   title: string;

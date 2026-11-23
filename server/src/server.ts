@@ -2,7 +2,7 @@ import app from "./app";
 import { env } from "./config/env";
 
 import { closeDatabase, getDatabase } from "./config/database";
-import { ensureRagIndexes } from "./repositories/rag.repository";
+import { ensureRagIndexes, ensureRagSearchIndex } from "./repositories/rag.repository";
 
 /**
  * Connects infrastructure, starts the HTTP server, and registers graceful
@@ -11,7 +11,8 @@ import { ensureRagIndexes } from "./repositories/rag.repository";
 async function bootstrap(): Promise<void> {
     await getDatabase();
     await ensureRagIndexes();
-
+    await ensureRagSearchIndex();
+    
     const server = app.listen(
         env.PORT,
         () => console.log(`Server running on port ${env.PORT}`)

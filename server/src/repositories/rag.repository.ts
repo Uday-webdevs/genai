@@ -1,4 +1,4 @@
-import type { Collection } from "mongodb";
+import type { Collection, SearchIndexDescription } from "mongodb";
 
 import { getDatabase } from "../config/database";
 import type {
@@ -7,11 +7,14 @@ import type {
   RagDocumentSummary,
   RetrievedChunk,
 } from "../types/rag";
+import { env } from "../config/env";
 
 interface RagCollections {
   documents: Collection<RagDocument>;
   chunks: Collection<RagChunk>;
 }
+
+const ragVectorIndex = env.RAG_VECTOR_INDEX;
 
 /**
  * Gets the typed MongoDB collections used by the RAG subsystem.
@@ -59,6 +62,41 @@ export async function ensureRagIndexes(): Promise<void> {
       },
     ),
   ]);
+}
+
+export async function ensureRagSearchIndex(): Promise<void> {
+  const { chunks } = await getRagCollections();
+  
+  try {
+    const existingSearchIndex = (await chunks.listSearchIndexes(ragVectorIndex).toArray()).length;
+
+    if (existingSearchIndex) {
+      console.log(`Search index "${ragVectorIndex}" already exists.`);
+      return;
+    }
+
+    // Create vector search index definition
+    const indexDefinition: SearchIndexDescription = {
+      name: ragVectorIndex,
+      type: 'vectorSearch',
+      definition: {
+        fields: [
+          {
+            type: 'vector',
+            path: 'embedding' satisfies keyof RagChunk,
+            numDimensions: 1536,
+            similarity: 'cosine'            
+          }
+        ]
+      }
+    }
+
+    const result = await chunks.createSearchIndex(indexDefinition);
+    console.log(`Triggered creation of vector search index: ${result}`);
+  } catch (e) {
+    console.error(`Failed to ensure vector search index:`, e);
+    throw e;
+  }
 }
 
 /**
@@ -162,6 +200,8 @@ export async function searchChunksByVector(
   // Retrieve extra candidates before checking document status so a failed or
   // processing document cannot crowd ready content out of the final results.
   const vectorLimit = Math.min(numCandidates, limit * 3);
+  console.log("searchChunksByVector - vectorLimit", vectorLimit)
+  console.log("searchChunksByVector - numCandidates", numCandidates)
   const results = await chunks
     .aggregate<VectorSearchResult>([
       {
@@ -195,6 +235,7 @@ export async function searchChunksByVector(
     ])
     .toArray();
 
+  console.log("searchChunksByVector - results", results)
   return results.map((result) => ({
     chunkId: result._id,
     documentId: result.documentId,
